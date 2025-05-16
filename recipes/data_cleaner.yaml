@@ -1,0 +1,12 @@
+model_kwargs:
+  model: Qwen/Qwen2.5-Math-7B-Instruct
+  trust_remote_code: true
+  max_model_len: 4096
+  gpu_memory_utilization: 0.9
+  enforce_eager: true
+  tensor_parallel_size: 4
+
+sampling_params:
+  temperature: 0.7
+  top_p: 0.9
+  max_tokens: 4096
