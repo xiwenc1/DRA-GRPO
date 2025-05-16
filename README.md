@@ -1,4 +1,4 @@
-# DRA-GRPO
+# DRA-GRPO 
 Official code for the paper: DRA-GRPO: Exploring Diversity-Aware Reward Adjustment for R1-Zero-Like Training of Large Language Models [![paper](https://img.shields.io/badge/arXiv-Paper-brightgreen)](https://arxiv.org/abs/2505.09655)
 
 Paper link (preprint): https://arxiv.org/abs/2505.09655
