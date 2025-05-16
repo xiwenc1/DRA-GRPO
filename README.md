@@ -69,5 +69,9 @@ base evaL_all.sh
 
 We will release it soon!
 
+##
+
+Our code is built based on [Open-rs](https://github.com/knoveleng/open-rs). Thanks!
+
 
 
