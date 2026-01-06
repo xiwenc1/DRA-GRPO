@@ -481,13 +481,20 @@ class DRGRPOTrainer(Trainer):
         # Instead, we set them to the columns expected by the `training_step` method, hence the override.
         if self._signature_columns is None:
             self._signature_columns = ["prompt"]
-
-    def _get_train_sampler(self) -> Sampler:
+    def _get_train_sampler(self, dataset=None) -> Sampler:
         # Returns a sampler that ensures each prompt is repeated across multiple processes. This guarantees that
         # identical prompts are distributed to different GPUs, allowing rewards to be computed and normalized correctly
         # within each prompt group. Using the same seed across processes ensures consistent prompt assignment,
         # preventing discrepancies in group formation.
-        return RepeatRandomSampler(self.train_dataset, self.num_generations, seed=self.args.seed)
+        if dataset is None:
+            dataset = self.train_dataset
+        return RepeatRandomSampler(dataset, self.num_generations, seed=self.args.seed)
+    # def _get_train_sampler(self) -> Sampler:
+    #     # Returns a sampler that ensures each prompt is repeated across multiple processes. This guarantees that
+    #     # identical prompts are distributed to different GPUs, allowing rewards to be computed and normalized correctly
+    #     # within each prompt group. Using the same seed across processes ensures consistent prompt assignment,
+    #     # preventing discrepancies in group formation.
+    #     return RepeatRandomSampler(self.train_dataset, self.num_generations, seed=self.args.seed)
 
     def _get_eval_sampler(self, eval_dataset) -> Sampler:
         # Returns a sampler that ensures each prompt is repeated across multiple processes. This guarantees that
@@ -684,18 +691,43 @@ class DRGRPOTrainer(Trainer):
             
             embeddings = torch.from_numpy(embeddings).to(device) 
             embeddings = F.normalize(embeddings, p=2, dim=1)
+            # 1) gather embeddings across ranks -> (global_B, D)
+            embeddings_global = gather(embeddings)
 
+            G = self.num_generations
+            D = embeddings_global.size(-1)
+            assert embeddings_global.size(0) % G == 0
+
+            # 2) group them -> (num_groups, G, D)
+            E = embeddings_global.view(-1, G, D)
+
+            # 3) groupwise similarity -> (num_groups, G, G)
+            # cosine sim because E is normalized
+            S = torch.bmm(E, E.transpose(1, 2))
+
+            # 4) row-sum inside each group -> (num_groups, G)
+            row_sum = S.sum(dim=-1)
+
+            # 5) graph-cut weight: 1 / (row_sum + eps) -> (global_B,)
+            diversity_weights_global = (1.0 / (row_sum + 1e-6)).view(-1)
+
+            # 6) apply to global rewards (rewards is already gathered)
+            rewards = rewards * diversity_weights_global
             # print("embeddings:",embeddings.shape)
 
-            similarity_matrix = embeddings @ embeddings.T
-            similarity_sums = similarity_matrix.sum(dim=1)
-            diversity_weights = 1.0 / (similarity_sums + 1e-6)
+#             similarity_matrix = embeddings @ embeddings.T
+#             similarity_sums = similarity_matrix.sum(dim=1)
+#             diversity_weights = 1.0 / (similarity_sums + 1e-6)
 
 
 
-            diversity_weights = gather(diversity_weights) 
+#             diversity_weights = gather(diversity_weights) 
 
-            rewards = rewards * diversity_weights
+#             rewards = rewards * diversity_weights
+        
+        
+    
+    
         
         
         # Compute grouped-wise rewards
